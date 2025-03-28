@@ -1,25 +1,55 @@
-name: Post welcome comment
+name: Step 2, Add a job
 
 on:
-  pull_request:
-    types: [opened]
+  workflow_dispatch:
+  push:
+    branches:
+      - welcome-workflow
 
 permissions:
-  pull-requests: write
+  contents: write
 
 jobs:
-  build:
-    name: Post welcome comment
+  get_current_step:
+    name: Check current step number
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Post a comment
+      - id: get_step
         run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-            -d '{"body":"Welcome to the project! Thank you for your contribution."}'
+          echo "current_step=$(cat ./.github/steps/-step.txt)" >> $GITHUB_OUTPUT
+    outputs:
+      current_step: ${{ steps.get_step.outputs.current_step }}
+
+  on_add_job:
+    name: On add job
+    needs: get_current_step
+    if: >-
+      ${{ !github.event.repository.is_template
+          && needs.get_current_step.outputs.current_step == 2 }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set environment variables
+        run: |
+          echo "FILE=.github/workflows/welcome.yml" >> $GITHUB_ENV
+          echo "SEARCH=jobs:" >> $GITHUB_ENV
+
+      - name: Check workflow contents, jobs
+        uses: skills/action-check-file@v1
+        with:
+          file: "${{ env.FILE }}"
+          search: "${{ env.SEARCH }}"
+
+      - name: Update to step 3
+        uses: skills/action-update-step@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          from_step: 2
+          to_step: 3
+          branch_name: welcome-workflow
